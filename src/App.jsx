@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 
 // 멘토링·컨설팅 URL 상수 (작업 18: URL 상수화)
 const MENTORING_URLS = {
@@ -1891,16 +1891,84 @@ const CareerInterviewWorkbook = () => {
   };
 
   const downloadFinal = () => {
-    const lines = [`경력 면접 · 최종 답변집`, '='.repeat(60), ''];
-    lines.push(`지원 회사: ${basicInfo.company || '-'}`);
-    lines.push(`지원 직무: ${basicInfo.position || '-'}`);
-    lines.push(`산업: ${basicInfo.industry || '-'}\n`);
-    if (finalText.trim()) lines.push(`\n━━━ 통합 완성본 ━━━\n${finalText}\n`);
-    lines.push(getRawText());
-    lines.push('\n' + '='.repeat(60));
-    lines.push('© 2026 CareerEngineer. All Rights Reserved.');
-    const h = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:'맑은 고딕',sans-serif;line-height:1.8;padding:40px;white-space:pre-wrap}</style></head><body>${lines.join('\n')}</body></html>`;
-    const b = new Blob([h], { type: 'application/msword;charset=utf-8' });
+    const today = new Date().toISOString().slice(0,10);
+    const esc = (s) => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const br = (s) => esc(s).replace(/\n/g, '<br>');
+    
+    const finalCard = finalText.trim() ? `
+      <div class="answer-card answer-card-primary">
+        <div class="card-label">통합 완성본 — 핵심 답변 정리</div>
+        <p class="answer-text">${br(finalText)}</p>
+      </div>` : '';
+    
+    const qaBlocks = QUESTIONS.map(qq => {
+      const core = answers[`${qq.label}_core`]?.trim();
+      const finalA = answers[`${qq.label}_final`]?.trim();
+      const stageRows = qq.stages.map((st, si) => 
+        st.questions.map((sq, qi) => {
+          const a = answers[`${qq.label}_s${si}_q${qi}`]?.trim();
+          if (!a) return '';
+          return `<div class="sub-row"><div class="sub-q">${esc(sq)}</div><div class="sub-a">${br(a)}</div></div>`;
+        }).join('')
+      ).join('');
+      const tailRows = qq.tails.map((t, ti) => {
+        const ta = answers[`${qq.label}_tail_${ti}`]?.trim();
+        if (!ta) return '';
+        return `<div class="tail-row"><div class="tail-q"><span class="tail-label">꼬리질문</span> ${esc(t.q)}</div><div class="tail-a">${br(ta)}</div></div>`;
+      }).join('');
+      
+      if (!core && !finalA && !stageRows && !tailRows) return '';
+      
+      return `<div class="q-block">
+        <div class="q-header"><span class="q-tag">${esc(qq.label)}</span><span class="q-title">${esc(qq.title)}</span>${qq.required ? '<span class="q-required">필수</span>' : ''}</div>
+        ${core ? `<div class="core-row"><div class="core-label">핵심 문장</div><div class="core-text">${br(core)}</div></div>` : ''}
+        ${stageRows}
+        ${finalA ? `<div class="final-row"><div class="final-label">최종 답변</div><div class="final-text">${br(finalA)}</div></div>` : ''}
+        ${tailRows}
+      </div>`;
+    }).filter(Boolean).join('');
+    
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>경력 면접 - ${esc(basicInfo.company || '회사')}</title>
+<style>
+body { font-family: 'Pretendard', '맑은 고딕', 'Malgun Gothic', sans-serif; max-width: 800px; margin: 0 auto; padding: 50px 60px; color: #0E2750; line-height: 1.7; font-size: 14px; }
+.header { text-align: center; border-bottom: 3px solid #0E2750; padding-bottom: 20px; margin-bottom: 32px; }
+.header h1 { margin: 0; font-size: 26px; color: #0E2750; letter-spacing: 4px; font-weight: 700; }
+.header .meta { color: #6E7A8F; font-size: 13px; margin-top: 10px; }
+.header .meta strong { color: #1B3A6B; }
+.answer-card { background: #FBFAF6; border: 1px solid #F2F1EC; border-left: 4px solid #C9A86A; border-radius: 6px; padding: 20px 24px; margin-bottom: 24px; }
+.answer-card-primary { background: #F2F1EC; border-left: 4px solid #0E2750; }
+.card-label { font-size: 11px; color: #C9A86A; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; margin-bottom: 10px; }
+.answer-card-primary .card-label { color: #0E2750; }
+.answer-text { font-size: 15px; line-height: 2; margin: 0; color: #0E2750; }
+h2 { font-size: 17px; color: #0E2750; border-bottom: 2px solid #C9A86A; padding-bottom: 6px; margin: 36px 0 16px; font-weight: 700; letter-spacing: 0.5px; }
+.q-block { background: #FFFFFF; border: 1px solid #F2F1EC; border-radius: 8px; padding: 20px 22px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(14, 39, 80, 0.04); }
+.q-header { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid #F2F1EC; margin-bottom: 14px; flex-wrap: wrap; }
+.q-tag { display: inline-block; background: #0E2750; color: #FFFFFF; font-size: 11px; padding: 3px 9px; border-radius: 4px; font-weight: 700; letter-spacing: 0.5px; }
+.q-title { font-size: 15px; color: #0E2750; font-weight: 700; flex: 1; }
+.q-required { display: inline-block; background: #C9A86A; color: #FFFFFF; font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 700; letter-spacing: 0.3px; }
+.core-row { background: #FBFAF6; border-left: 3px solid #C9A86A; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; }
+.core-label { font-size: 11px; color: #C9A86A; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
+.core-text { font-size: 14px; color: #0E2750; line-height: 1.7; }
+.sub-row { background: #FBFAF6; border-radius: 4px; padding: 10px 14px; margin-bottom: 8px; }
+.sub-q { font-size: 13px; color: #1B3A6B; font-weight: 600; margin-bottom: 4px; line-height: 1.5; }
+.sub-a { font-size: 14px; color: #0E2750; line-height: 1.7; }
+.final-row { background: #F2F1EC; border-left: 3px solid #0E2750; padding: 12px 16px; border-radius: 4px; margin: 12px 0; }
+.final-label { font-size: 11px; color: #0E2750; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
+.final-text { font-size: 14px; color: #0E2750; line-height: 1.9; }
+.tail-row { background: #FFFFFF; border: 1px dashed #6E7A8F66; border-radius: 4px; padding: 10px 14px; margin-top: 10px; }
+.tail-q { font-size: 13px; color: #1B3A6B; margin-bottom: 4px; line-height: 1.5; }
+.tail-label { display: inline-block; background: #6E7A8F; color: #FFFFFF; font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; margin-right: 4px; }
+.tail-a { font-size: 14px; color: #0E2750; line-height: 1.7; }
+.foot { margin-top: 50px; padding-top: 18px; border-top: 1px solid #F2F1EC; font-size: 12px; color: #6E7A8F; text-align: center; line-height: 1.7; }
+</style></head><body>
+<div class="header"><h1>경력 면접 답변집</h1>
+<div class="meta">${basicInfo.company ? `<strong>${esc(basicInfo.company)}</strong>` : ''} ${basicInfo.position ? `${basicInfo.company ? '· ' : ''}${esc(basicInfo.position)} 지원` : ''}${basicInfo.industry ? ` · ${esc(basicInfo.industry)}` : ''}</div></div>
+${finalCard}
+${qaBlocks ? `<h2>질문별 답변</h2>${qaBlocks}` : ''}
+<div class="foot">작성일 · ${today}<br>CareerEngineer 경력 면접 워크북으로 작성 · © 2026 CareerEngineer. All Rights Reserved.</div>
+</body></html>`;
+    
+    const b = new Blob([html], { type: 'application/msword;charset=utf-8' });
     const u = URL.createObjectURL(b);
     const a = document.createElement('a');
     a.href = u; a.download = `${basicInfo.company || '회사'}_경력면접_최종.doc`;
