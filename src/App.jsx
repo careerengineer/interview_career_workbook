@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
 
+
+// __toDocxBlob: HTML을 실제 .docx Blob으로 변환 (모바일 Word 호환)
+// index.html 의 html-docx-js CDN 스크립트로 window.htmlDocx 가 제공됨
+const __toDocxBlob = (html) => {
+  if (typeof window !== 'undefined' && window.htmlDocx && window.htmlDocx.asBlob) {
+    try { return window.htmlDocx.asBlob(html); } catch (e) { console.error('htmlDocx failed:', e); }
+  }
+  return new Blob(['\ufeff' + html], { type: 'application/msword' });
+};
+
+
 // 멘토링·컨설팅 URL 상수 (작업 18: URL 상수화)
 const MENTORING_URLS = {
   consulting:        'https://www.latpeed.com/products/S92cP',  // 1-Hour 1:1 취업컨설팅
@@ -208,7 +219,7 @@ const IntroStickyHeader = ({ workbookKey, stepLabel, StepNavComponent }) => {
           style={{ padding: '8px 14px', borderRadius: 8, border: 'none', fontSize: 14, fontWeight: 600, fontFamily: 'inherit', background: _INTRO_INK, color: '#fff', opacity: 0.4, cursor: 'not-allowed' }}
           title="작성을 시작하면 활성화됩니다"
         >
-          저장(.doc)
+          저장(.docx)
         </button>
       </div>
     </div>
@@ -1881,11 +1892,11 @@ const CareerInterviewWorkbook = () => {
   const savePartial = () => {
     const today = new Date().toISOString().slice(0,10);
     const text = getRawText();
-    const h = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:'맑은 고딕',sans-serif;line-height:1.7;padding:40px;white-space:pre-wrap}</style></head><body>${text}\n\n© 2026 CareerEngineer. All Rights Reserved.</body></html>`;
-    const b = new Blob([h], { type: 'application/msword;charset=utf-8' });
+    const h = `<!DOCTYPE html><html xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" xmlns=\"http://www.w3.org/TR/REC-html40\"><head><meta charset="utf-8"><style>@page{size:A4;margin:1.5cm 1.8cm}body{font-family:'맑은 고딕',sans-serif;line-height:1.7;padding:40px;white-space:pre-wrap;mso-pre-wrap:yes}</style></head><body>${text}\n\n© 2026 CareerEngineer. All Rights Reserved.</body></html>`;
+    const b = __toDocxBlob(h);
     const u = URL.createObjectURL(b);
     const a = document.createElement('a');
-    a.href = u; a.download = `${basicInfo.company || '회사'}_경력면접_임시저장_${today}.doc`;
+    a.href = u; a.download = `${basicInfo.company || '회사'}_경력면접_임시저장_${today}.docx`;
     a.click(); URL.revokeObjectURL(u);
     setDownloadSuccess(true); setTimeout(() => setDownloadSuccess(false), 3000);
   };
@@ -1893,86 +1904,95 @@ const CareerInterviewWorkbook = () => {
   const downloadFinal = () => {
     const today = new Date().toISOString().slice(0,10);
     const esc = (s) => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const br = (s) => esc(s).replace(/\n/g, '<br>');
+    const br = (s) => esc(s).replace(/\n/g, '<br/>');
     
-    const finalCard = finalText.trim() ? `
-      <div class="answer-card answer-card-primary">
-        <div class="card-label">통합 완성본 — 핵심 답변 정리</div>
-        <p class="answer-text">${br(finalText)}</p>
-      </div>` : '';
-    
-    const qaBlocks = QUESTIONS.map(qq => {
-      const core = answers[`${qq.label}_core`]?.trim();
-      const finalA = answers[`${qq.label}_final`]?.trim();
-      const stageRows = qq.stages.map((st, si) => 
-        st.questions.map((sq, qi) => {
-          const a = answers[`${qq.label}_s${si}_q${qi}`]?.trim();
-          if (!a) return '';
-          return `<div class="sub-row"><div class="sub-q">${esc(sq)}</div><div class="sub-a">${br(a)}</div></div>`;
-        }).join('')
-      ).join('');
-      const tailRows = qq.tails.map((t, ti) => {
-        const ta = answers[`${qq.label}_tail_${ti}`]?.trim();
-        if (!ta) return '';
-        return `<div class="tail-row"><div class="tail-q"><span class="tail-label">꼬리질문</span> ${esc(t.q)}</div><div class="tail-a">${br(ta)}</div></div>`;
-      }).join('');
-      
-      if (!core && !finalA && !stageRows && !tailRows) return '';
-      
-      return `<div class="q-block">
-        <div class="q-header"><span class="q-tag">${esc(qq.label)}</span><span class="q-title">${esc(qq.title)}</span>${qq.required ? '<span class="q-required">필수</span>' : ''}</div>
-        ${core ? `<div class="core-row"><div class="core-label">핵심 문장</div><div class="core-text">${br(core)}</div></div>` : ''}
-        ${stageRows}
-        ${finalA ? `<div class="final-row"><div class="final-label">최종 답변</div><div class="final-text">${br(finalA)}</div></div>` : ''}
-        ${tailRows}
+    // 항목 표시 헬퍼 (빈 답변도 항목명 표시)
+    const item = (label, val) => `
+      <div style="margin:10pt 0 10pt 0;">
+        <p style="font-size:11pt;font-weight:bold;color:#1B3A6B;margin:0 0 4pt 0;padding-left:10pt;border-left:3pt solid #C9A86A;">${esc(label)}</p>
+        ${val && val.trim() 
+          ? `<p style="font-size:11pt;line-height:1.7;color:#0E2750;margin:0 0 0 13pt;">${br(val)}</p>` 
+          : `<p style="font-size:11pt;line-height:1.7;color:#6E7A8F;margin:0 0 0 13pt;font-style:italic;">[작성 전]</p>`}
       </div>`;
-    }).filter(Boolean).join('');
     
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>경력 면접 - ${esc(basicInfo.company || '회사')}</title>
+    // 섹션 헤더
+    const sh = (t) => `<p style="font-size:14pt;font-weight:bold;color:#0E2750;margin:24pt 0 10pt 0;padding-bottom:6pt;border-bottom:2pt solid #0E2750;">${esc(t)}</p>`;
+    
+    // 메타
+    const metaLine = (basicInfo.company || basicInfo.position) 
+      ? `<p style="text-align:center;color:#1B3A6B;font-size:12pt;font-weight:bold;margin:0 0 24pt 0;">${esc(basicInfo.company || '')}${basicInfo.company && basicInfo.position ? ' · ' : ''}${basicInfo.position ? esc(basicInfo.position) + ' 지원' : ''}</p>`
+      : '';
+    
+    // 통합 완성본
+    const finalSection = `${sh('통합 완성본 — 핵심 답변 정리')}
+      ${finalText && finalText.trim()
+        ? `<div style="padding:16pt 20pt;background:#F2F1EC;border-left:3pt solid #0E2750;margin:6pt 0 14pt 0;">${finalText.split('\n\n').filter(x => x.trim()).map(x => `<p style="font-size:11pt;line-height:1.9;color:#0E2750;margin:0 0 12pt 0;">${br(x)}</p>`).join('')}</div>`
+        : `<p style="font-size:11pt;line-height:1.9;color:#6E7A8F;margin:6pt 0 14pt 0;padding:14pt 18pt;background:#FBFAF6;border-left:3pt solid #C9A86A;font-style:italic;">[통합 완성본이 여기에 정리됩니다.]</p>`}`;
+    
+    // 질문별 블록 (모든 질문 표시 - 빈 답변도)
+    const qaBlocks = QUESTIONS.map(qq => {
+      const core = answers[`${qq.label}_core`];
+      const finalA = answers[`${qq.label}_final`];
+      
+      // 질문 헤더
+      const qHeader = `<p style="font-size:12pt;font-weight:bold;color:#1B3A6B;margin:18pt 0 8pt 0;padding-bottom:4pt;border-bottom:1pt solid #1B3A6B;">[${esc(qq.label)}] ${esc(qq.title)}${qq.required ? ' <span style="color:#C9A86A;font-size:10pt;">(필수)</span>' : ''}</p>`;
+      
+      // 핵심 문장
+      const coreItem = item('핵심 문장', core);
+      
+      // 단계별 답변
+      const stageItems = qq.stages.map((st, si) => 
+        st.questions.map((sq, qi) => item(sq, answers[`${qq.label}_s${si}_q${qi}`])).join('')
+      ).join('');
+      
+      // 최종 답변 (있으면 박스로 강조, 없으면 placeholder)
+      const finalAItem = `
+        <div style="margin:14pt 0 10pt 0;">
+          <p style="font-size:11pt;font-weight:bold;color:#0E2750;margin:0 0 6pt 0;padding-left:10pt;border-left:3pt solid #0E2750;">최종 답변</p>
+          ${finalA && finalA.trim()
+            ? `<p style="font-size:11pt;line-height:1.9;color:#0E2750;margin:0 0 0 13pt;padding:10pt 14pt;background:#F2F1EC;">${br(finalA)}</p>`
+            : `<p style="font-size:11pt;line-height:1.9;color:#6E7A8F;margin:0 0 0 13pt;padding:10pt 14pt;background:#FBFAF6;font-style:italic;">[최종 답변 작성 전]</p>`}
+        </div>`;
+      
+      // 꼬리질문
+      const tailItems = qq.tails.map((t, ti) => item(`[꼬리질문] ${t.q}`, answers[`${qq.label}_tail_${ti}`])).join('');
+      
+      return `${qHeader}${coreItem}${stageItems}${finalAItem}${tailItems}`;
+    }).join('');
+    
+    const allSection = `${sh('질문별 답변 정리')}${qaBlocks}`;
+    
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="ProgId" content="Word.Document">
+<title>경력 면접 답변집</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotPromptForConvert/></w:WordDocument></xml><![endif]-->
 <style>
-body { font-family: 'Pretendard', '맑은 고딕', 'Malgun Gothic', sans-serif; max-width: 800px; margin: 0 auto; padding: 50px 60px; color: #0E2750; line-height: 1.7; font-size: 14px; }
-.header { text-align: center; border-bottom: 3px solid #0E2750; padding-bottom: 20px; margin-bottom: 32px; }
-.header h1 { margin: 0; font-size: 26px; color: #0E2750; letter-spacing: 4px; font-weight: 700; }
-.header .meta { color: #6E7A8F; font-size: 13px; margin-top: 10px; }
-.header .meta strong { color: #1B3A6B; }
-.answer-card { background: #FBFAF6; border: 1px solid #F2F1EC; border-left: 4px solid #C9A86A; border-radius: 6px; padding: 20px 24px; margin-bottom: 24px; }
-.answer-card-primary { background: #F2F1EC; border-left: 4px solid #0E2750; }
-.card-label { font-size: 11px; color: #C9A86A; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; margin-bottom: 10px; }
-.answer-card-primary .card-label { color: #0E2750; }
-.answer-text { font-size: 15px; line-height: 2; margin: 0; color: #0E2750; }
-h2 { font-size: 17px; color: #0E2750; border-bottom: 2px solid #C9A86A; padding-bottom: 6px; margin: 36px 0 16px; font-weight: 700; letter-spacing: 0.5px; }
-.q-block { background: #FFFFFF; border: 1px solid #F2F1EC; border-radius: 8px; padding: 20px 22px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(14, 39, 80, 0.04); }
-.q-header { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid #F2F1EC; margin-bottom: 14px; flex-wrap: wrap; }
-.q-tag { display: inline-block; background: #0E2750; color: #FFFFFF; font-size: 11px; padding: 3px 9px; border-radius: 4px; font-weight: 700; letter-spacing: 0.5px; }
-.q-title { font-size: 15px; color: #0E2750; font-weight: 700; flex: 1; }
-.q-required { display: inline-block; background: #C9A86A; color: #FFFFFF; font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 700; letter-spacing: 0.3px; }
-.core-row { background: #FBFAF6; border-left: 3px solid #C9A86A; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; }
-.core-label { font-size: 11px; color: #C9A86A; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
-.core-text { font-size: 14px; color: #0E2750; line-height: 1.7; }
-.sub-row { background: #FBFAF6; border-radius: 4px; padding: 10px 14px; margin-bottom: 8px; }
-.sub-q { font-size: 13px; color: #1B3A6B; font-weight: 600; margin-bottom: 4px; line-height: 1.5; }
-.sub-a { font-size: 14px; color: #0E2750; line-height: 1.7; }
-.final-row { background: #F2F1EC; border-left: 3px solid #0E2750; padding: 12px 16px; border-radius: 4px; margin: 12px 0; }
-.final-label { font-size: 11px; color: #0E2750; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
-.final-text { font-size: 14px; color: #0E2750; line-height: 1.9; }
-.tail-row { background: #FFFFFF; border: 1px dashed #6E7A8F66; border-radius: 4px; padding: 10px 14px; margin-top: 10px; }
-.tail-q { font-size: 13px; color: #1B3A6B; margin-bottom: 4px; line-height: 1.5; }
-.tail-label { display: inline-block; background: #6E7A8F; color: #FFFFFF; font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; margin-right: 4px; }
-.tail-a { font-size: 14px; color: #0E2750; line-height: 1.7; }
-.foot { margin-top: 50px; padding-top: 18px; border-top: 1px solid #F2F1EC; font-size: 12px; color: #6E7A8F; text-align: center; line-height: 1.7; }
-</style></head><body>
-<div class="header"><h1>경력 면접 답변집</h1>
-<div class="meta">${basicInfo.company ? `<strong>${esc(basicInfo.company)}</strong>` : ''} ${basicInfo.position ? `${basicInfo.company ? '· ' : ''}${esc(basicInfo.position)} 지원` : ''}${basicInfo.industry ? ` · ${esc(basicInfo.industry)}` : ''}</div></div>
-${finalCard}
-${qaBlocks ? `<h2>질문별 답변</h2>${qaBlocks}` : ''}
-<div class="foot">작성일 · ${today}<br>CareerEngineer 경력 면접 워크북으로 작성 · © 2026 CareerEngineer. All Rights Reserved.</div>
-</body></html>`;
+@page Section1 { size: A4; margin: 2.5cm 2cm; mso-page-orientation: portrait; }
+div.Section1 { page: Section1; }
+body { font-family: '맑은 고딕', 'Malgun Gothic', sans-serif; font-size: 11pt; color: #0E2750; line-height: 1.7; }
+p { margin: 0 0 8pt 0; }
+</style>
+</head>
+<body lang="KO-KR">
+<div class="Section1">
+<p style="text-align:right;color:#6E7A8F;font-size:10pt;margin:0 0 4pt 0;">작성일 · ${today}</p>
+<p style="font-size:22pt;font-weight:bold;color:#0E2750;text-align:center;margin:0 0 6pt 0;padding-bottom:14pt;border-bottom:3pt solid #0E2750;letter-spacing:6pt;">경 력 면 접 답변집</p>
+${metaLine}
+
+${finalSection}
+${allSection}
+
+</div></body></html>`;
     
-    const b = new Blob([html], { type: 'application/msword;charset=utf-8' });
+    const BOM = '\uFEFF';
+    const b = __toDocxBlob(html);
     const u = URL.createObjectURL(b);
-    const a = document.createElement('a');
-    a.href = u; a.download = `${basicInfo.company || '회사'}_경력면접_최종.doc`;
-    a.click(); URL.revokeObjectURL(u);
+    const a = document.createElement('a'); a.href = u;
+    a.download = `경력 면접_${(basicInfo.company || '미입력').replace(/[^a-zA-Z0-9가-힣\s]/g, '_')}_${today}.docx`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(u), 1000);
     setDownloadSuccess(true); setTimeout(() => setDownloadSuccess(false), 5000);
   };
 
@@ -2083,7 +2103,7 @@ ${qaBlocks ? `<h2>질문별 답변</h2>${qaBlocks}` : ''}
                 <StepNavigatorDropdown open={showStepNav} onClose={() => setShowStepNav(false)} currentKey="interview_career" />
               </div>
               <button onClick={savePartial} className="ce-save-btn" style={S.btnSaveHeader}>
-                저장(.doc)
+                저장(.docx)
               </button>
             </div>
           </div>
@@ -2194,7 +2214,7 @@ ${qaBlocks ? `<h2>질문별 답변</h2>${qaBlocks}` : ''}
                 <StepNavigatorDropdown open={showStepNav} onClose={() => setShowStepNav(false)} currentKey="interview_career" />
               </div>
               <button onClick={savePartial} className="ce-save-btn" style={S.btnSaveHeader}>
-                저장(.doc)
+                저장(.docx)
               </button>
             </div>
           </div>
@@ -2265,7 +2285,7 @@ ${qaBlocks ? `<h2>질문별 답변</h2>${qaBlocks}` : ''}
                 이전
               </button>
               <button onClick={downloadFinal} style={{ ...S.btnPrimary, flex: 1, padding: '18px 32px', fontSize: FONT.size.lg }}>
-                전체 답변 다운로드 (.doc)
+                전체 답변 다운로드 (.docx)
               </button>
             </div>
 
@@ -2303,7 +2323,7 @@ ${qaBlocks ? `<h2>질문별 답변</h2>${qaBlocks}` : ''}
               <StepNavigatorDropdown open={showStepNav} onClose={() => setShowStepNav(false)} currentKey="interview_career" />
             </div>
             <button onClick={savePartial} className="ce-save-btn" style={S.btnSaveHeader}>
-              저장(.doc)
+              저장(.docx)
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.sm }}>
